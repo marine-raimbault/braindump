@@ -1,18 +1,23 @@
 <script>
 	import { testConnection, initRepo, isConfigured as ghConfigured } from '$lib/github.js';
-	import { loadEntries, lastSync } from '$lib/stores/entries.js';
+	import { loadEntries, lastSync, entries } from '$lib/stores/entries.js';
 
 	let ghToken = $state(localStorage.getItem('bd_github_token') || '');
 	let ghRepo = $state(localStorage.getItem('bd_github_repo') || '');
 	let aiKey = $state(localStorage.getItem('bd_anthropic_key') || '');
+	let tgToken = $state(localStorage.getItem('bd_telegram_token') || '');
+	let tgChatId = $state(localStorage.getItem('bd_telegram_chat_id') || '');
 
-	let ghStatus = $state(ghConfigured() ? 'saved' : 'none'); // none | testing | ok | error | saved
+	let ghStatus = $state(ghConfigured() ? 'saved' : 'none');
 	let ghError = $state('');
 	let ghInfo = $state('');
 
+	let tgStatus = $state(tgToken && tgChatId ? 'saved' : 'none');
+	let tgError = $state('');
+	let tgSending = $state(false);
+
 	let syncing = $state(false);
 
-	// Determine which AI is active
 	let activeAI = $derived(aiKey ? 'anthropic' : 'cloudflare');
 
 	async function testGithub() {
@@ -39,6 +44,66 @@
 	function clearAnthropicKey() {
 		aiKey = '';
 		localStorage.removeItem('bd_anthropic_key');
+	}
+
+	function saveTelegram() {
+		localStorage.setItem('bd_telegram_token', tgToken.trim());
+		localStorage.setItem('bd_telegram_chat_id', tgChatId.trim());
+		tgStatus = tgToken && tgChatId ? 'saved' : 'none';
+	}
+
+	async function testTelegram() {
+		if (!tgToken || !tgChatId) return;
+		tgStatus = 'testing';
+		tgError = '';
+
+		try {
+			const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					chat_id: tgChatId,
+					text: '✅ Braindump connected!'
+				})
+			});
+			const data = await res.json();
+			if (data.ok) {
+				tgStatus = 'ok';
+				saveTelegram();
+			} else {
+				tgStatus = 'error';
+				tgError = data.description || 'Failed to send';
+			}
+		} catch (e) {
+			tgStatus = 'error';
+			tgError = e.message;
+		}
+	}
+
+	async function sendDigest() {
+		if (!tgToken || !tgChatId) return;
+		tgSending = true;
+		tgError = '';
+
+		try {
+			const res = await fetch('/api/digest', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					telegramToken: tgToken,
+					chatId: tgChatId,
+					entries: $entries
+				})
+			});
+			const data = await res.json();
+			if (data.error) {
+				tgError = data.error;
+			}
+		} catch (e) {
+			tgError = e.message;
+		} finally {
+			tgSending = false;
+		}
 	}
 
 	async function syncNow() {
@@ -181,6 +246,66 @@
 			</div>
 		</div>
 
+		<!-- Telegram -->
+		<div class="section">
+			<div class="section-head">
+				<span class="section-icon">✈</span>
+				<span>Telegram Digest</span>
+				{#if tgStatus === 'ok' || tgStatus === 'saved'}
+					<span class="status-dot ok"></span>
+				{:else if tgStatus === 'error'}
+					<span class="status-dot err"></span>
+				{/if}
+			</div>
+
+			<p class="section-note">
+				Get AI-generated learning digests sent to Telegram based on your entries.
+			</p>
+
+			<label class="field">
+				<span class="field-label">
+					Bot Token
+					<a href="https://t.me/botfather" target="_blank" class="field-link">
+						create bot →
+					</a>
+				</span>
+				<input
+					type="password"
+					bind:value={tgToken}
+					placeholder="123456789:ABC..."
+					oninput={saveTelegram}
+				/>
+			</label>
+
+			<label class="field">
+				<span class="field-label">
+					Chat ID
+					<span class="field-hint">(send /start to your bot, then use @userinfobot)</span>
+				</span>
+				<input
+					type="text"
+					bind:value={tgChatId}
+					placeholder="123456789"
+					oninput={saveTelegram}
+				/>
+			</label>
+
+			<div class="actions">
+				<button class="btn" onclick={testTelegram} disabled={!tgToken || !tgChatId || tgStatus === 'testing'}>
+					{tgStatus === 'testing' ? 'testing...' : 'test connection'}
+				</button>
+				{#if tgStatus === 'ok' || tgStatus === 'saved'}
+					<button class="btn secondary" onclick={sendDigest} disabled={tgSending || $entries.length === 0}>
+						{tgSending ? 'sending...' : 'send digest now'}
+					</button>
+				{/if}
+			</div>
+
+			{#if tgError}
+				<div class="msg err">{tgError}</div>
+			{/if}
+		</div>
+
 		<!-- How it works -->
 		<div class="section info">
 			<div class="section-head">
@@ -193,6 +318,7 @@
 				<p><strong>3.</strong> Paste both above and hit connect</p>
 				<p><strong>4.</strong> Every dump becomes a markdown file in your repo</p>
 				<p><strong>5.</strong> AI auto-classifies into categories with training questions</p>
+				<p><strong>6.</strong> Optionally connect Telegram for learning digests</p>
 			</div>
 		</div>
 	</div>
@@ -254,6 +380,10 @@
 		opacity: 0.4;
 		margin-bottom: 0.25rem;
 		letter-spacing: 0.03em;
+	}
+	.field-hint {
+		opacity: 0.6;
+		font-size: 0.6rem;
 	}
 	.field-link {
 		color: var(--pine);
