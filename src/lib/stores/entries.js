@@ -60,10 +60,16 @@ export async function loadEntries() {
 /**
  * Add a new entry - saves to store and syncs to GitHub
  */
+function generateId() {
+	const now = new Date();
+	const pad = (n, len = 2) => String(n).padStart(len, '0');
+	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+}
+
 export async function addEntry(entryData) {
 	const entry = {
 		...entryData,
-		id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+		id: generateId(),
 		reviews: 0,
 		lastReview: null,
 		created: Date.now()
