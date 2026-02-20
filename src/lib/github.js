@@ -2,14 +2,19 @@
  * GitHub API client for braindump.
  *
  * Uses the GitHub Contents API to read/write individual markdown files
- * to a private repo. Each entry = one .md file in /entries/
+ * to a private repo. Entries organized by domain folders:
+ * - daily/   - quick dumps, random thoughts
+ * - skills/  - learning, technical knowledge
+ * - goals/   - OKRs, objectives, progress
+ * - health/  - fitness, nutrition, sleep
+ * - library/ - book notes, articles
  *
  * Auth: Personal Access Token (classic) with `repo` scope.
  * Stored in localStorage, never committed anywhere.
  */
 
 const API = 'https://api.github.com';
-const ENTRIES_PATH = 'entries';
+const DOMAINS = ['daily', 'skills', 'goals', 'health', 'library'];
 
 function getConfig() {
 	const token = import.meta.env.VITE_GITHUB_TOKEN || localStorage.getItem('bd_github_token');
@@ -47,85 +52,90 @@ export async function testConnection() {
 }
 
 /**
- * Initialize repo - create entries/ directory if it doesn't exist
+ * Initialize repo - create all domain folders if they don't exist
  */
 export async function initRepo() {
 	const { token, repo } = getConfig();
 	if (!token || !repo) return;
 
-	try {
-		const res = await fetch(`${API}/repos/${repo}/contents/${ENTRIES_PATH}`, { headers: headers(token) });
-		if (res.status === 404) {
-			// Create a .gitkeep to initialize the directory
-			await fetch(`${API}/repos/${repo}/contents/${ENTRIES_PATH}/.gitkeep`, {
-				method: 'PUT',
-				headers: headers(token),
-				body: JSON.stringify({
-					message: 'init braindump entries',
-					content: btoa('')
-				})
-			});
+	for (const domain of DOMAINS) {
+		try {
+			const res = await fetch(`${API}/repos/${repo}/contents/${domain}`, { headers: headers(token) });
+			if (res.status === 404) {
+				await fetch(`${API}/repos/${repo}/contents/${domain}/.gitkeep`, {
+					method: 'PUT',
+					headers: headers(token),
+					body: JSON.stringify({
+						message: `init ${domain} folder`,
+						content: btoa('')
+					})
+				});
+			}
+		} catch (e) {
+			console.error(`Failed to init ${domain}:`, e);
 		}
-	} catch (e) {
-		console.error('Failed to init repo:', e);
 	}
 }
 
 /**
- * Fetch all entries from the repo
- * Returns array of { filename, content } objects
+ * Fetch all entries from all domain folders
+ * Returns array of { filename, content, domain, sha } objects
  */
 export async function fetchAllEntries() {
 	const { token, repo } = getConfig();
 	if (!token || !repo) return [];
 
-	try {
-		// List all files in entries/
-		const res = await fetch(`${API}/repos/${repo}/contents/${ENTRIES_PATH}`, { headers: headers(token) });
-		if (!res.ok) return [];
+	const allEntries = [];
 
-		const files = await res.json();
-		const mdFiles = files.filter(f => f.name.endsWith('.md'));
+	for (const domain of DOMAINS) {
+		try {
+			const res = await fetch(`${API}/repos/${repo}/contents/${domain}`, { headers: headers(token) });
+			if (!res.ok) continue;
 
-		// Fetch each file's content (in parallel, batched)
-		const entries = await Promise.all(
-			mdFiles.map(async (file) => {
-				try {
-					const r = await fetch(file.url, { headers: headers(token) });
-					const data = await r.json();
-					const content = atob(data.content.replace(/\n/g, ''));
-					return { filename: file.name, content, sha: data.sha };
-				} catch {
-					return null;
-				}
-			})
-		);
+			const files = await res.json();
+			const mdFiles = files.filter(f => f.name.endsWith('.md'));
 
-		return entries.filter(Boolean);
-	} catch (e) {
-		console.error('Failed to fetch entries:', e);
-		return [];
+			const entries = await Promise.all(
+				mdFiles.map(async (file) => {
+					try {
+						const r = await fetch(file.url, { headers: headers(token) });
+						const data = await r.json();
+						const content = atob(data.content.replace(/\n/g, ''));
+						return { filename: file.name, content, domain, sha: data.sha };
+					} catch {
+						return null;
+					}
+				})
+			);
+
+			allEntries.push(...entries.filter(Boolean));
+		} catch (e) {
+			console.error(`Failed to fetch ${domain}:`, e);
+		}
 	}
+
+	return allEntries;
 }
 
 /**
- * Save a single entry (create or update)
+ * Save a single entry to a domain folder (create or update)
  */
-export async function saveEntry(filename, content, existingSha = null) {
+export async function saveEntry(filename, content, domain = 'daily', existingSha = null) {
 	const { token, repo } = getConfig();
 	if (!token || !repo) throw new Error('Not configured');
 
-	const path = `${ENTRIES_PATH}/${filename}`;
+	// Validate domain
+	if (!DOMAINS.includes(domain)) domain = 'daily';
+
+	const path = `${domain}/${filename}`;
 	const body = {
-		message: existingSha ? `update ${filename}` : `add ${filename}`,
-		content: btoa(unescape(encodeURIComponent(content))) // handle unicode
+		message: existingSha ? `update ${filename}` : `add ${filename} to ${domain}`,
+		content: btoa(unescape(encodeURIComponent(content)))
 	};
 
-	// If updating, we need the current SHA
 	if (existingSha) {
 		body.sha = existingSha;
 	} else {
-		// Check if file already exists (to get SHA for update)
 		try {
 			const check = await fetch(`${API}/repos/${repo}/contents/${path}`, { headers: headers(token) });
 			if (check.ok) {
@@ -150,19 +160,18 @@ export async function saveEntry(filename, content, existingSha = null) {
 	}
 
 	const data = await res.json();
-	return data.content.sha; // Return new SHA for future updates
+	return data.content.sha;
 }
 
 /**
- * Delete an entry
+ * Delete an entry from a domain folder
  */
-export async function deleteEntry(filename, sha) {
+export async function deleteEntry(filename, domain = 'daily', sha) {
 	const { token, repo } = getConfig();
 	if (!token || !repo) throw new Error('Not configured');
 
-	const path = `${ENTRIES_PATH}/${filename}`;
+	const path = `${domain}/${filename}`;
 
-	// Get SHA if not provided
 	if (!sha) {
 		const check = await fetch(`${API}/repos/${repo}/contents/${path}`, { headers: headers(token) });
 		if (!check.ok) return;
@@ -189,3 +198,5 @@ export function getRepoUrl() {
 	const { repo } = getConfig();
 	return repo ? `https://github.com/${repo}` : null;
 }
+
+export { DOMAINS };

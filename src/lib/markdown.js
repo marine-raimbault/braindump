@@ -30,6 +30,7 @@ export function parseEntry(filename, content) {
 	return {
 		id: meta.id || filename.replace('.md', ''),
 		category: meta.category || 'raw',
+		domain: meta.domain || 'daily',
 		title: meta.title || body.slice(0, 40),
 		tags: meta.tags || [],
 		summary: meta.summary || '',
@@ -47,6 +48,7 @@ export function serializeEntry(entry) {
 		'---',
 		`id: ${entry.id}`,
 		`category: ${entry.category}`,
+		`domain: ${entry.domain || 'daily'}`,
 		`title: "${entry.title.replace(/"/g, '\\"')}"`,
 		`tags: [${entry.tags.map(t => t).join(', ')}]`,
 		`trainable: ${entry.trainable}`,

@@ -72,7 +72,7 @@ export async function classifyEntry(text) {
 		if (getKey()) {
 			const raw = await callClaude(
 				`You are a brain dump classifier. Given a note, return ONLY valid JSON (no markdown, no backticks, no explanation):
-{"category":"command|concept|insight|task|question|reference|raw","title":"short 3-6 word title","tags":["tag1","tag2"],"summary":"one sentence essence","trainable":true|false,"training_q":"a question to test recall"}
+{"category":"command|concept|insight|task|question|reference|raw","domain":"daily|skills|goals|health|library","title":"short 3-6 word title","tags":["tag1","tag2"],"summary":"one sentence essence","trainable":true|false,"training_q":"a question to test recall"}
 
 Rules:
 - command: SQL, CLI, code snippets, terminal commands, API calls
@@ -82,6 +82,14 @@ Rules:
 - question: things to look up, open questions
 - reference: URLs, book titles, people, resources
 - raw: everything else
+
+Domain (which folder to store in):
+- daily: random thoughts, quick notes, misc observations
+- skills: learning something, technical knowledge, how-to, tutorials
+- goals: objectives, OKRs, progress updates, milestones
+- health: fitness, nutrition, sleep, workouts, mental health, sports
+- library: book notes, article summaries, quotes, references
+
 - trainable: true if worth reviewing later (commands, concepts, insights)
 - training_q: if trainable, write a question that tests understanding/recall of this specific knowledge`,
 				text
@@ -95,6 +103,7 @@ Rules:
 		console.error('Classification failed:', e);
 		return {
 			category: 'raw',
+			domain: 'daily',
 			title: text.slice(0, 40),
 			tags: [],
 			summary: text.slice(0, 100),

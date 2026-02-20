@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { fetchAllEntries, saveEntry as ghSave, isConfigured as ghConfigured } from '$lib/github.js';
+import { fetchAllEntries, saveEntry as ghSave, isConfigured as ghConfigured, DOMAINS } from '$lib/github.js';
 import { parseEntry, serializeEntry, entryToFilename } from '$lib/markdown.js';
 
 // Core state
@@ -25,8 +25,21 @@ export const stats = derived(entries, $e => ({
 	categories: $e.reduce((acc, e) => {
 		acc[e.category] = (acc[e.category] || 0) + 1;
 		return acc;
+	}, {}),
+	domains: $e.reduce((acc, e) => {
+		acc[e.domain || 'daily'] = (acc[e.domain || 'daily'] || 0) + 1;
+		return acc;
 	}, {})
 }));
+
+// Domain-specific derived stores
+export const entriesByDomain = derived(entries, $e => {
+	const byDomain = {};
+	for (const domain of DOMAINS) {
+		byDomain[domain] = $e.filter(e => (e.domain || 'daily') === domain);
+	}
+	return byDomain;
+});
 
 /**
  * Load all entries from GitHub
@@ -39,8 +52,9 @@ export async function loadEntries() {
 
 	try {
 		const raw = await fetchAllEntries();
-		const parsed = raw.map(({ filename, content, sha }) => {
+		const parsed = raw.map(({ filename, content, domain, sha }) => {
 			const entry = parseEntry(filename, content);
+			entry.domain = domain; // Set domain from folder
 			shaCache[entry.id] = sha;
 			return entry;
 		});
@@ -70,6 +84,7 @@ export async function addEntry(entryData) {
 	const entry = {
 		...entryData,
 		id: generateId(),
+		domain: entryData.domain || 'daily',
 		reviews: 0,
 		lastReview: null,
 		created: Date.now()
@@ -83,7 +98,7 @@ export async function addEntry(entryData) {
 		syncing.set(true);
 		try {
 			const md = serializeEntry(entry);
-			const sha = await ghSave(entryToFilename(entry), md);
+			const sha = await ghSave(entryToFilename(entry), md, entry.domain);
 			shaCache[entry.id] = sha;
 		} catch (e) {
 			error.set(`Sync failed: ${e.message}`);
@@ -108,7 +123,7 @@ export async function updateEntry(updated) {
 		syncing.set(true);
 		try {
 			const md = serializeEntry(updated);
-			const sha = await ghSave(entryToFilename(updated), md, shaCache[updated.id]);
+			const sha = await ghSave(entryToFilename(updated), md, updated.domain || 'daily', shaCache[updated.id]);
 			shaCache[updated.id] = sha;
 		} catch (e) {
 			error.set(`Sync failed: ${e.message}`);
@@ -118,3 +133,5 @@ export async function updateEntry(updated) {
 		}
 	}
 }
+
+export { DOMAINS };
