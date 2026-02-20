@@ -8,9 +8,8 @@ const config = {
 			assets: 'build',
 			fallback: 'index.html' // SPA mode
 		}),
-		// Change 'braindump' to your GitHub repo name
 		paths: {
-			base: process.env.NODE_ENV === 'production' ? '/braindump' : ''
+			base: ''
 		}
 	}
 };
