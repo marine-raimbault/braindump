@@ -6,7 +6,7 @@ Zero-friction personal knowledge tool. Type random thoughts, AI classifies them,
 
 - **Frontend:** SvelteKit 5 + Vite 6
 - **Storage:** GitHub Contents API → `marine-raimbault/braindump-data` (private)
-- **AI:** Anthropic API (Claude) for classification + hints
+- **AI:** Cloudflare Workers AI (Llama 3.1, free) or Anthropic API (Claude, optional)
 - **Hosting:** Cloudflare Pages
 - **Auth:** Cloudflare Access (email-only access)
 
@@ -47,10 +47,12 @@ The actual content/note here
 ## Key Files
 
 - `src/lib/github.js` — GitHub Contents API client
-- `src/lib/classifier.js` — Anthropic API for classification + hints
+- `src/lib/classifier.js` — AI classification (Cloudflare AI or Anthropic)
 - `src/lib/markdown.js` — frontmatter parser/serializer
 - `src/lib/stores/entries.js` — Svelte store with optimistic updates
 - `src/lib/components/` — DumpView, RecallView, TrainView, SettingsView, Nav
+- `functions/api/classify.js` — Cloudflare Workers AI classification endpoint
+- `functions/api/hint.js` — Cloudflare Workers AI hint generation endpoint
 
 ## Deployment
 
@@ -61,6 +63,6 @@ npx wrangler pages deploy build --project-name braindump
 
 ## Setup Required
 
-1. GitHub PAT with `repo` scope
-2. Anthropic API key (optional, for AI features)
-3. Both stored in browser localStorage
+1. GitHub PAT with `repo` scope (required for saving entries)
+2. Anthropic API key (optional - Cloudflare AI is used by default for free)
+3. Both stored in browser localStorage or `.env.local`
