@@ -1,6 +1,5 @@
 <script>
 	import { testConnection, initRepo, isConfigured as ghConfigured } from '$lib/github.js';
-	import { isConfigured as aiConfigured } from '$lib/classifier.js';
 	import { loadEntries, lastSync } from '$lib/stores/entries.js';
 
 	let ghToken = $state(localStorage.getItem('bd_github_token') || '');
@@ -11,8 +10,10 @@
 	let ghError = $state('');
 	let ghInfo = $state('');
 
-	let aiStatus = $state(aiConfigured() ? 'saved' : 'none');
 	let syncing = $state(false);
+
+	// Determine which AI is active
+	let activeAI = $derived(aiKey ? 'anthropic' : 'cloudflare');
 
 	async function testGithub() {
 		localStorage.setItem('bd_github_token', ghToken.trim());
@@ -33,7 +34,11 @@
 
 	function saveAnthropicKey() {
 		localStorage.setItem('bd_anthropic_key', aiKey.trim());
-		aiStatus = 'saved';
+	}
+
+	function clearAnthropicKey() {
+		aiKey = '';
+		localStorage.removeItem('bd_anthropic_key');
 	}
 
 	async function syncNow() {
@@ -51,7 +56,7 @@
 <div class="settings">
 	<div class="inner">
 		<h2 class="title">setup</h2>
-		<p class="subtitle">Connect your GitHub repo and Anthropic API key. Both stored locally in your browser only — never sent anywhere except their respective APIs.</p>
+		<p class="subtitle">Connect your GitHub repo to save entries. AI classification is free via Cloudflare.</p>
 
 		<!-- GitHub -->
 		<div class="section">
@@ -110,36 +115,70 @@
 			{/if}
 		</div>
 
-		<!-- Anthropic -->
+		<!-- AI Provider -->
 		<div class="section">
 			<div class="section-head">
 				<span class="section-icon">✦</span>
-				<span>Anthropic API Key</span>
-				{#if aiStatus === 'saved'}
-					<span class="status-dot ok"></span>
+				<span>AI Classification</span>
+				<span class="status-dot ok"></span>
+			</div>
+
+			<div class="ai-status">
+				<div class="ai-provider" class:active={activeAI === 'cloudflare'}>
+					<span class="ai-icon">☁</span>
+					<div class="ai-info">
+						<span class="ai-name">Cloudflare AI</span>
+						<span class="ai-model">Llama 3.1 · Free</span>
+					</div>
+					{#if activeAI === 'cloudflare'}
+						<span class="ai-badge active">active</span>
+					{/if}
+				</div>
+
+				<div class="ai-provider" class:active={activeAI === 'anthropic'}>
+					<span class="ai-icon">◈</span>
+					<div class="ai-info">
+						<span class="ai-name">Anthropic</span>
+						<span class="ai-model">Claude Sonnet · Paid</span>
+					</div>
+					{#if activeAI === 'anthropic'}
+						<span class="ai-badge active">active</span>
+					{:else}
+						<span class="ai-badge">optional</span>
+					{/if}
+				</div>
+			</div>
+
+			<div class="ai-upgrade">
+				<p class="section-note">
+					{#if activeAI === 'cloudflare'}
+						Using free Cloudflare AI. Add Anthropic key for better classification quality.
+					{:else}
+						Using Anthropic Claude for premium classification.
+					{/if}
+				</p>
+
+				<label class="field">
+					<span class="field-label">
+						Anthropic API Key (optional)
+						<a href="https://console.anthropic.com/settings/keys" target="_blank" class="field-link">
+							get one →
+						</a>
+					</span>
+					<input
+						type="password"
+						bind:value={aiKey}
+						placeholder="sk-ant-..."
+						oninput={saveAnthropicKey}
+					/>
+				</label>
+
+				{#if aiKey}
+					<button class="btn secondary small" onclick={clearAnthropicKey}>
+						use free Cloudflare AI instead
+					</button>
 				{/if}
 			</div>
-			<p class="section-note">
-				Used for auto-classifying your dumps and generating training questions. Without it, entries save as raw notes (no AI features).
-			</p>
-
-			<label class="field">
-				<span class="field-label">
-					API Key
-					<a href="https://console.anthropic.com/settings/keys" target="_blank" class="field-link">
-						get one →
-					</a>
-				</span>
-				<input
-					type="password"
-					bind:value={aiKey}
-					placeholder="sk-ant-..."
-				/>
-			</label>
-
-			<button class="btn" onclick={saveAnthropicKey} disabled={!aiKey}>
-				{aiStatus === 'saved' ? 'saved ✓' : 'save'}
-			</button>
 		</div>
 
 		<!-- How it works -->
@@ -153,7 +192,7 @@
 				<p><strong>2.</strong> Generate a Personal Access Token with <code>repo</code> scope</p>
 				<p><strong>3.</strong> Paste both above and hit connect</p>
 				<p><strong>4.</strong> Every dump becomes a markdown file in your repo</p>
-				<p><strong>5.</strong> Your data is always yours — plain text, version-controlled, browsable on GitHub</p>
+				<p><strong>5.</strong> AI auto-classifies into categories with training questions</p>
 			</div>
 		</div>
 	</div>
@@ -256,6 +295,10 @@
 		background: transparent;
 		border-color: var(--border);
 	}
+	.btn.small {
+		padding: 5px 10px;
+		font-size: 0.65rem;
+	}
 	.msg {
 		font-size: 0.68rem;
 		margin-top: 0.5rem;
@@ -284,4 +327,67 @@
 		font-size: 0.68rem;
 	}
 	.how strong { opacity: 0.6; }
+
+	/* AI Provider styles */
+	.ai-status {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-bottom: 0.8rem;
+	}
+	.ai-provider {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.6rem 0.8rem;
+		background: var(--bg);
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		opacity: 0.4;
+		transition: all 0.2s;
+	}
+	.ai-provider.active {
+		opacity: 1;
+		border-color: var(--pine);
+		background: #9ccfd808;
+	}
+	.ai-icon {
+		font-size: 1.1rem;
+		opacity: 0.5;
+	}
+	.ai-provider.active .ai-icon {
+		opacity: 1;
+	}
+	.ai-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+	.ai-name {
+		font-size: 0.75rem;
+		font-weight: 500;
+	}
+	.ai-model {
+		font-size: 0.6rem;
+		opacity: 0.5;
+	}
+	.ai-badge {
+		font-size: 0.55rem;
+		padding: 2px 6px;
+		border-radius: 4px;
+		background: var(--bg-overlay);
+		opacity: 0.5;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	.ai-badge.active {
+		background: #9ccfd820;
+		color: var(--pine);
+		opacity: 1;
+	}
+	.ai-upgrade {
+		padding-top: 0.5rem;
+		border-top: 1px solid var(--border);
+	}
 </style>
