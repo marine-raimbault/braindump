@@ -16,6 +16,9 @@
 	let tgError = $state('');
 	let tgSending = $state(false);
 
+	let coachingEnabled = $state(localStorage.getItem('bd_coaching_enabled') === 'true');
+	let coachingRegistering = $state(false);
+
 	let syncing = $state(false);
 
 	let activeAI = $derived(aiKey ? 'anthropic' : 'cloudflare');
@@ -110,6 +113,58 @@
 		syncing = true;
 		await loadEntries();
 		syncing = false;
+	}
+
+	async function toggleCoaching() {
+		if (coachingEnabled) {
+			// Unregister
+			coachingRegistering = true;
+			try {
+				await fetch('/api/coaching/register', {
+					method: 'DELETE',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ chatId: tgChatId })
+				});
+				coachingEnabled = false;
+				localStorage.setItem('bd_coaching_enabled', 'false');
+			} catch (e) {
+				tgError = e.message;
+			} finally {
+				coachingRegistering = false;
+			}
+		} else {
+			// Register
+			if (!tgToken || !tgChatId || !ghToken || !ghRepo) {
+				tgError = 'Connect GitHub and Telegram first';
+				return;
+			}
+			coachingRegistering = true;
+			try {
+				const res = await fetch('/api/coaching/register', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						oderId: tgChatId,
+						telegramToken: tgToken,
+						chatId: tgChatId,
+						githubToken: ghToken,
+						githubRepo: ghRepo,
+						timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+					})
+				});
+				const data = await res.json();
+				if (data.error) {
+					tgError = data.error;
+				} else {
+					coachingEnabled = true;
+					localStorage.setItem('bd_coaching_enabled', 'true');
+				}
+			} catch (e) {
+				tgError = e.message;
+			} finally {
+				coachingRegistering = false;
+			}
+		}
 	}
 
 	function formatTime(ts) {
@@ -303,6 +358,25 @@
 
 			{#if tgError}
 				<div class="msg err">{tgError}</div>
+			{/if}
+
+			{#if tgStatus === 'ok' || tgStatus === 'saved'}
+				<div class="coaching-section">
+					<div class="coaching-toggle">
+						<div class="coaching-info">
+							<span class="coaching-title">🌅 Daily Morning Coaching</span>
+							<span class="coaching-desc">Get personalized coaching every morning based on your entries</span>
+						</div>
+						<button
+							class="toggle-btn"
+							class:active={coachingEnabled}
+							onclick={toggleCoaching}
+							disabled={coachingRegistering}
+						>
+							{coachingRegistering ? '...' : coachingEnabled ? 'ON' : 'OFF'}
+						</button>
+					</div>
+				</div>
 			{/if}
 		</div>
 
@@ -519,5 +593,52 @@
 	.ai-upgrade {
 		padding-top: 0.5rem;
 		border-top: 1px solid var(--border);
+	}
+
+	/* Coaching toggle */
+	.coaching-section {
+		margin-top: 0.8rem;
+		padding-top: 0.8rem;
+		border-top: 1px solid var(--border);
+	}
+	.coaching-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.8rem;
+	}
+	.coaching-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	.coaching-title {
+		font-size: 0.75rem;
+		font-weight: 500;
+	}
+	.coaching-desc {
+		font-size: 0.62rem;
+		opacity: 0.4;
+	}
+	.toggle-btn {
+		background: var(--bg-overlay);
+		border: 1px solid var(--border);
+		color: var(--text);
+		padding: 5px 12px;
+		border-radius: 12px;
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		transition: all 0.2s;
+		opacity: 0.5;
+	}
+	.toggle-btn.active {
+		background: #9ccfd820;
+		border-color: var(--pine);
+		color: var(--pine);
+		opacity: 1;
+	}
+	.toggle-btn:hover:not(:disabled) {
+		opacity: 0.8;
 	}
 </style>
