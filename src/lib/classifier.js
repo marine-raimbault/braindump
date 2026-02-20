@@ -11,7 +11,7 @@
  */
 
 function getKey() {
-	return localStorage.getItem('bd_anthropic_key');
+	return import.meta.env.VITE_ANTHROPIC_KEY || localStorage.getItem('bd_anthropic_key');
 }
 
 async function callClaude(system, userMessage) {

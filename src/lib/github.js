@@ -12,8 +12,8 @@ const API = 'https://api.github.com';
 const ENTRIES_PATH = 'entries';
 
 function getConfig() {
-	const token = localStorage.getItem('bd_github_token');
-	const repo = localStorage.getItem('bd_github_repo'); // format: "username/repo-name"
+	const token = import.meta.env.VITE_GITHUB_TOKEN || localStorage.getItem('bd_github_token');
+	const repo = import.meta.env.VITE_GITHUB_REPO || localStorage.getItem('bd_github_repo');
 	return { token, repo };
 }
 
