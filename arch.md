@@ -42,28 +42,47 @@ created: 2026-02-20T09:00:00Z
 The actual content/note here
 ```
 
+## Folder Structure (Domain-based)
+
+```
+braindump-data/
+  daily/      # quick dumps, random thoughts
+  skills/     # learning, technical knowledge
+  goals/      # objectives, milestones, OKRs
+  health/     # fitness, nutrition, sleep
+  library/    # book notes, articles, quotes
+  vision.json # North Star vision config
+```
+
+AI auto-routes entries to the right domain folder based on content.
+
 ## Views
 
 1. **dump** — minimal input, auto-classified on enter
 2. **recall** — search/filter entries by text, tags, category
 3. **train** — flashcard review with hints, forgot/hard/easy rating
-4. **settings** — connect GitHub, AI, Telegram, daily coaching
+4. **vision** — North Star vision, role models, growth areas
+5. **settings** — connect GitHub, AI, Telegram, daily coaching
 
 ## Key Files
 
 ### Frontend
-- `src/lib/github.js` — GitHub Contents API client
+- `src/lib/github.js` — GitHub Contents API client (domain-aware)
 - `src/lib/classifier.js` — AI classification (Cloudflare or Anthropic)
 - `src/lib/markdown.js` — frontmatter parser/serializer
-- `src/lib/stores/entries.js` — Svelte store with optimistic updates
-- `src/lib/components/` — DumpView, RecallView, TrainView, SettingsView, Nav
+- `src/lib/stores/entries.js` — Svelte store with domain support
+- `src/lib/components/` — DumpView, RecallView, TrainView, VisionView, SettingsView, Nav
 
 ### Backend (Cloudflare Pages Functions)
 - `functions/api/classify.js` — AI classification endpoint
 - `functions/api/hint.js` — AI hint generation for training
+- `functions/api/vision.js` — Vision/North Star CRUD
 - `functions/api/digest.js` — Generate and send Telegram digest
 - `functions/api/coaching/register.js` — Register/unregister for daily coaching
 - `functions/api/coaching/send.js` — Cron endpoint to send coaching to all users
+- `functions/api/telegram/webhook.js` — Interactive Telegram bot
+- `functions/api/telegram/callback.js` — Handle inline button presses
+- `functions/api/telegram/setup.js` — Set webhook URL
 
 ### Config
 - `wrangler.toml` — Cloudflare bindings (AI, KV)
@@ -88,6 +107,19 @@ The actual content/note here
 - Connect via bot token + chat ID
 - **Send digest now** — on-demand learning summary
 - **Daily coaching** — automated morning motivation
+- **Interactive bot** — full braindump via chat:
+  - Send any message → auto-classified and saved
+  - `/train` — random flashcard quiz with inline buttons
+  - `/stats` — brain stats by domain
+  - `/domains` — domain guide
+  - `/help` — all commands
+
+### Vision / North Star
+- Define who you're becoming
+- Add role models with traits to adopt
+- Track growth areas with progress (1-5)
+- Daily reflection question
+- Guides AI coaching context
 
 ### Daily Coaching System
 1. User enables coaching in settings
@@ -122,6 +154,35 @@ Workflow: `.github/workflows/deploy.yml`
 
 # Development Log
 
+## Session: Vision & Interactive Telegram
+
+### What was built
+1. **Vision / North Star feature**
+   - `VisionView.svelte` — UI for defining personal vision
+   - `functions/api/vision.js` — API to store/retrieve vision in GitHub
+   - Role models with traits to adopt
+   - Growth areas with progress tracking (1-5)
+   - Daily reflection question
+
+2. **Interactive Telegram Bot**
+   - `functions/api/telegram/webhook.js` — Full webhook handler
+   - `functions/api/telegram/callback.js` — Inline button callbacks
+   - Commands: `/train`, `/stats`, `/domains`, `/help`
+   - Send any message → auto-classified → saved to GitHub
+   - Flashcard quiz with reveal answer + rating buttons
+   - Stats by domain
+
+3. **Domain-based folder structure**
+   - Changed from flat `entries/` to domain folders
+   - AI auto-routes content to: `daily/`, `skills/`, `goals/`, `health/`, `library/`
+   - Updated `github.js` and `classifier.js` for domain support
+
+4. **Environment fixes**
+   - Set `BOT_TOKEN` as Cloudflare Pages secret
+   - Fixed webhook to handle unregistered users
+
+---
+
 ## Session: Initial Build
 
 ### What was built
@@ -154,34 +215,24 @@ Workflow: `.github/workflows/deploy.yml`
 - **Free by default** — Cloudflare AI, no paid APIs required
 - **Progressive enhancement** — basic works, AI adds magic
 
-### Decision: Flat vs Nested Structure
+### Decision: Domain-based Folder Structure
 
-**Current: Flat with tags**
+**Implemented: Domain folders**
 ```
-entries/
-  2026-02-20-*.md  # all entries, filtered by tags
-```
-
-**Future consideration: Domain folders**
-```
-brain/
-  daily/      # quick dumps
-  skills/     # learning paths
-  goals/      # OKRs, tracking
-  health/     # workouts, meals, sleep
-  library/    # book notes, articles
+braindump-data/
+  daily/      # quick dumps, random thoughts
+  skills/     # learning paths, technical knowledge
+  goals/      # OKRs, milestones, progress tracking
+  health/     # workouts, meals, sleep, fitness
+  library/    # book notes, articles, quotes
 ```
 
-**Why flat for now:**
-- Simpler to implement
-- Tags provide filtering
-- One coach can see everything
-- Can migrate later if needed
-
-**When to add folders:**
-- When context size becomes a problem for AI
-- When users want specialized coaches
-- When different retention policies needed
+**Why domain folders:**
+- AI auto-classifies content into appropriate domain
+- Better context management for coaching
+- Smaller, focused context per domain
+- Can have specialized coaches per domain
+- Tags still available within domains for filtering
 
 ### Decision: Multiple Coaches
 
